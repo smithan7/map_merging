@@ -13,6 +13,7 @@
 #include <math.h>
 
 #include "KeypointMatcher.h"
+#include "FastMarching2Star.h"
 
 #include <vector>
 
@@ -21,45 +22,13 @@ using namespace cv;
 
 int main() {
 
+	KeypointMatcher kpMatcher;
 
-	// points
-	std::vector<cv::Point2f> p1;
-	p1.push_back(cv::Point2f(0,0));
-	p1.push_back(cv::Point2f(1,0));
-	p1.push_back(cv::Point2f(0,1));
+	Mat sub_mat = imread("/home/rdml/git/inference_coordination/maps/gmapping_split1.jpg", CV_8UC3);
+	Mat set_mat = imread("/home/rdml/git/inference_coordination/maps/gmapping.jpg", CV_8UC3);
 
-	// simple translation from p1 for testing:
-	std::vector<cv::Point2f> p2;
-	p2.push_back(cv::Point2f(1,1));
-	p2.push_back(cv::Point2f(2,1));
-	p2.push_back(cv::Point2f(1,2));
-
-	cv::Mat R = cv::estimateRigidTransform(p1,p2,false);
-
-	// extend rigid transformation to use perspectiveTransform:
-	cv::Mat H = cv::Mat(3,3,R.type());
-	H.at<double>(0,0) = R.at<double>(0,0);
-	H.at<double>(0,1) = R.at<double>(0,1);
-	H.at<double>(0,2) = R.at<double>(0,2);
-
-	H.at<double>(1,0) = R.at<double>(1,0);
-	H.at<double>(1,1) = R.at<double>(1,1);
-	H.at<double>(1,2) = R.at<double>(1,2);
-
-	H.at<double>(2,0) = 0.0;
-	H.at<double>(2,1) = 0.0;
-	H.at<double>(2,2) = 1.0;
-
-	// compute perspectiveTransform on p1
-	std::vector<cv::Point2f> result;
-	cv::perspectiveTransform(p1,result,H);
-
-	for(unsigned int i=0; i<result.size(); ++i){
-	    std::cout << result[i] << std::endl;
-	}
-
-	Mat sub = imread("/home/rdml/git/inference_coordination/maps/gmapping_split1.jpg", CV_8UC3);
-	Mat set = imread("/home/rdml/git/inference_coordination/maps/gmapping.jpg", CV_8UC3);
+	cout << "sub_mat.size(): " << sub_mat.size() << endl;
+	cout << "set_mat.size(): " << set_mat.size() << endl;
 
 	//resize(sub, sub, Size(), 0.2, 0.2);
 	//resize(set, set, Size(), 0.2, 0.2);
@@ -67,67 +36,91 @@ int main() {
 	//threshold(set,set,127,255,0);
 	//threshold(sub, sub, 127, 255,0);
 
-	KeypointMatcher kpMatcher;
-	char detectorType[] = "FAST"; // FAST, STAR, SIFT, SURF, ORB, BRISK, MSE
-	char extractorType[] = "ORB"; // SIFT, STAR, BRIEF, BRISK, ORB
-	char matchType[] = "BRUTE_FORCE"; // BRUTE_FORCE, FLANN
 
-	//kpMatcher.computeKeyPts(set, sub, detectorType, false);
-	//kpMatcher.computePoints();
-	kpMatcher.getWallPts(set, sub);
-	//kpMatcher.computeDescriptors(set, sub, extractorType);
-	//kpMatcher.computeknnMatches(set, sub, extractorType, matchType, 1);
-	//kpMatcher.computeHomography(); // needs smae number of pts :(
 
-	cerr << "kpMatcher.p_set.size(): " << kpMatcher.p_set.size() << endl;
-	cerr << "kpMatcher.p_sub.size(): " << kpMatcher.p_sub.size() << endl;
+	//sub_mat = kpMatcher.generateStartingConfig(set_mat, sub_mat);
+	//cout << "sub_mat.size(): " << sub_mat.size() << endl;
+	//cout << "set_mat.size(): " << set_mat.size() << endl;
+
+	vector<Point2f> set_pts, sub_pts;
+	kpMatcher.getWallPts(set_mat, set_pts);
+	kpMatcher.getWallPts(sub_mat, sub_pts);
+	vector<Point2f> sub_raw = sub_pts;
+	cout << "set.size(): " << set_pts.size() << endl;
+	cout << "sub.size(): " << sub_pts.size() << endl;
+
+
+	FastMarching2Star fm2( set_mat, set_pts );
+	//fm2.displayMap();
+	fm2.inflateWalls_to_crashRadius();
+	//fm2.displayMap();
+	fm2.inflateWalls_to_inflationRadius();
+	//fm2.displayMap();
+	fm2.wavePropagation();
+	//fm2.displayTime();
+	vector<Point2f> path = fm2.findPath();
+	fm2.displayPath( path );
 
 	Mat lastGood;
-
-	vector<Point2f> res = kpMatcher.p_sub;
-	vector<Point2f> resBest = res;
-	vector<Point2f> pair;
+	Mat transform;
 	vector<float> dists;
 	double lastDist = INFINITY;
+	int test = 0;
+
+	Mat H_kept = cv::Mat::eye(3,3,CV_64FC1);
+	float theta = 3.14159*10/360;
+	H_kept.at<double>(0,0) = cos(theta);
+	H_kept.at<double>(0,1) = -sin(theta);
+	H_kept.at<double>(0,2) = 230;
+	H_kept.at<double>(1,0) = sin(theta);
+	H_kept.at<double>(1,1) = cos(theta);
+	H_kept.at<double>(1,2) = 160;
+	H_kept.at<double>(2,0) = 0.0;
+	H_kept.at<double>(2,1) = 0.0;
+	H_kept.at<double>(2,2) = 1.0;
+
+	Mat rot_temp = Mat(sub_raw, CV_32FC1);
+	Mat rot_matches = Mat::zeros(rot_temp.size(), CV_32FC1);
+	perspectiveTransform(rot_temp, rot_matches, H_kept);
+
+	sub_pts = rot_matches;
+
 	while(true) {
-	    pair.clear(); dists.clear();
+		vector<Point2f> set_matches, sub_matches;
 
-	    //double dist = kpMatcher.flann_knn(destination, X, pair, dists);
-	    vector<Point2f> m_sub;
-	    double dist = kpMatcher.linearDist(res, kpMatcher.p_set, pair, m_sub, dists);
-	    cerr << "dist: " << dist << endl;
+	    double distSum = kpMatcher.linearDist(sub_pts, set_pts, set_matches, sub_matches, 300.0);
 
-	    kpMatcher.plotMatches(set, m_sub, res, pair);
+	    kpMatcher.plotMatches(set_mat, set_pts, sub_matches, set_matches);
 
-	    if(lastDist <= dist) {
-	    	resBest = res;
-	        break;  //converged?
-	    }
+	    lastDist = distSum;
+		float param[3] = {0,0,0};
+		kpMatcher.fit3DofQUADRATIC(set_matches, sub_matches, param, set_matches[0]);
 
-	    lastDist = dist;
+		if(abs(param[0]) + abs(param[1]) + abs(param[2]) < 0.01){
+			break;
+		}
 
-	    cerr << "res.size()/pair.size(): " << res.size() << " / " << pair.size() << endl;
+		cv::Mat H = cv::Mat(3,3,CV_64FC1);
+		H.at<double>(0,0) = cos(param[0]);
+		H.at<double>(0,1) = -sin(param[0]);
+		H.at<double>(0,2) = param[1];
+		H.at<double>(1,0) = sin(param[0]);
+		H.at<double>(1,1) = cos(param[0]);
+		H.at<double>(1,2) = param[2];
+		H.at<double>(2,0) = 0.0;
+		H.at<double>(2,1) = 0.0;
+		H.at<double>(2,2) = 1.0;
 
-	    //Mat r = cv::estimateRigidTransform(res, pair, false);
-	    Mat h = findHomography( m_sub, pair, CV_RANSAC);
+		H_kept = H_kept * H;
 
-	    Mat resMat = Mat(res, CV_32FC2);
-	    Mat resDest = Mat::zeros(resMat.size(), CV_32FC2);
-	    cerr << "resMat.size(): " << resMat.cols << " / " << resMat.rows << " , "<< resMat.type() << endl;
-	    cerr << "r.size(): " << h.cols << " / " << h.rows << endl;
-	    perspectiveTransform(resMat, resDest, h);
+		Mat rot_temp = Mat(sub_raw, CV_32FC1);
+		Mat rot_matches = Mat::zeros(rot_temp.size(), CV_32FC1);
+		perspectiveTransform(rot_temp, rot_matches, H_kept);
 
-	    res = vector<Point2f>(resDest);
-
+		sub_pts = rot_matches;
 	}
-
-
-	imshow("set", set);
-	waitKey(1);
-
-	imshow("sub", sub);
+	cerr << "done" <<endl;
 	waitKey(0);
-
 
 	return 0;
 }

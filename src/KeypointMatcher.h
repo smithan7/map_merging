@@ -19,7 +19,6 @@
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
-#include "opencv2/nonfree/nonfree.hpp"
 #include "opencv2/video/tracking.hpp"
 
 #include <vector>
@@ -31,29 +30,17 @@ class KeypointMatcher{
 public:
 	KeypointMatcher();
 	virtual ~KeypointMatcher();
-	void computeKeyPts(Mat set, Mat sub, char* detectorType, bool showKpts);
-	void computeDescriptors(Mat set, Mat sub, char* extractorType);
-	void computeknnMatches(Mat set, Mat sub, char* extractorType, char* matcherType, int k);
-	void homographyFilterMatches(char* method);
-	void computeHomography();
-	void getWallPts(Mat &set, Mat &sub);
+
+	void getWallPts(Mat &mat, vector<Point2f> &pts);
 	void plotMatches(Mat &set, vector<Point2f> &p_set, vector<Point2f> &res, vector<Point2f> &pair);
+	Mat generateStartingConfig(Mat &set, Mat &sub_in);
+	double linearDist(vector<Point2f> &p_sub, vector<Point2f> &p_set, vector<Point2f> &pair, vector<Point2f> &m_sub, float tol);
 
-	void findBestReansformSVD(Mat& _m, Mat& _d);
-	double flann_knn(Mat& m_destinations, Mat& m_object, vector<int>& ptpairs, vector<float>& dists);
-	double linearDist(vector<Point2f> &p_sub, vector<Point2f> &p_set, vector<Point2f> &pair, vector<Point2f> &m_sub, vector<float> &dist);
-	void computePoints();
-	char* detectorType, extractorType, matcherType, alignType;
-	cv::Ptr<cv::DescriptorExtractor> extractor;
-	cv::Ptr<cv::FeatureDetector> detector;
-	cv::Ptr<cv::DescriptorMatcher> matcher;
+	Mat getRotationMatrix(vector<Point2f> &src, vector<Point2f> &dst);
 
-	vector<KeyPoint> kp_set, kp_sub;
-	vector<Point2f> p_set, p_sub;
-	Mat ds_set, ds_sub;
-	vector< vector<DMatch> > matches;
-	bool matched;
-	std::vector<bool> matchesMask;
+	inline float sqErr_3Dof(Point2f p1, Point2f p2, float cos_alpha, float sin_alpha, Point2f T);
+	void fit3DofQUADRATIC(const vector<Point2f>& src_, const vector<Point2f>& dst_, float* param, const Point2f center);
+
 };
 
 #endif /* KEYPOINTMATCHER_H_ */

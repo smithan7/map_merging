@@ -4,14 +4,17 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
+../src/FastMarching2Star.cpp \
 ../src/KeypointMatcher.cpp \
 ../src/map_align.cpp 
 
 OBJS += \
+./src/FastMarching2Star.o \
 ./src/KeypointMatcher.o \
 ./src/map_align.o 
 
 CPP_DEPS += \
+./src/FastMarching2Star.d \
 ./src/KeypointMatcher.d \
 ./src/map_align.d 
 
