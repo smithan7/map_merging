@@ -12,15 +12,17 @@ FastMarching2Star::FastMarching2Star( Mat &map, vector<Point2f> &walls ) {
 	start = Point2f(80,100);
 	goal = Point2f(450, 300);
 
-	maxSpeed = 2.0;
-	this->map = Mat::ones(map.size(), CV_32FC1)*maxSpeed;
+	maxSpeed = 1.0;
+	this->speedMap = Mat::ones(map.size(), CV_32FC1)*maxSpeed;
+	this->map = Mat::zeros(map.size(), CV_8UC1);
 	cell2Meter = 0.5;
 	crashRadius = 1.0;
 	inflationRadius = 10.0;
 	fm_tol = 1.0;
 
 	for(size_t i=0; i<walls.size(); i++){
-		this->map.at<float>(walls[i]) = 0.0;
+		this->speedMap.at<float>(walls[i]) = 0.0;
+		this->map.at<uchar>(walls[i]) = 255;
 	}
 }
 
@@ -34,18 +36,16 @@ vector<Point2f> FastMarching2Star::findPath(){
 
 	float dist = sqrt( pow(start.x - c.x, 2) + pow(start.y-c.y,2) );
 	float prior_dist = dist + 1;
-	int iters = 0;
 	bool flag = true;
+	float mod_scale = 0.2;
 	while( flag || dist < prior_dist ){
 		if( dist < 10* this->maxSpeed ){
 			flag = false;
 		}
-		cout << "p: " << c.x << ", " << c.y << ", " << dist << endl;
-		iters++;
 		path.push_back( c );
 		Point2f g = getGradients( c );
 
-		float mod = 0.2*sqrt(pow(g.x,2) + pow(g.y,2));
+		float mod = mod_scale * sqrt(pow(g.x,2) + pow(g.y,2));
 		float alpha = atan2(g.y, g.x);
 		c.x = c.x - mod*cos( alpha );
 		c.y = c.y - mod*sin( alpha );
@@ -95,13 +95,13 @@ bool FastMarching2Star::wavePropagation(){
 	if( abs(start.x - goal.x) + abs(start.y - goal.y) < fm_tol ){
 		return true;
 	}
-	this->time = Mat::zeros(this->map.size(), CV_32FC1);
+	this->time = Mat::zeros(this->speedMap.size(), CV_32FC1);
 
-	Mat cSet = Mat::zeros(this->map.size(), CV_16S); // 1 means in closed set, 0 means not
-	Mat oSet = Mat::zeros(this->map.size(), CV_16S); // 1 means in open set, 0 means not
+	Mat cSet = Mat::zeros(this->speedMap.size(), CV_16S); // 1 means in closed set, 0 means not
+	Mat oSet = Mat::zeros(this->speedMap.size(), CV_16S); // 1 means in open set, 0 means not
 
-	Mat gScore = Mat::zeros(this->map.size(), CV_32F); // known cost from initial node to n
-	Mat fScore = Mat::ones(this->map.size(), CV_32F)*INFINITY; // known cost from initial node to n
+	Mat gScore = Mat::zeros(this->speedMap.size(), CV_32F); // known cost from initial node to n
+	Mat fScore = Mat::ones(this->speedMap.size(), CV_32F)*INFINITY; // known cost from initial node to n
 
 	vector<Point> oVec;
 	oVec.push_back(this->start);
@@ -127,6 +127,7 @@ bool FastMarching2Star::wavePropagation(){
 		}
 
 		if( mindex == -1){
+			this->time = gScore.clone();
 			return false;
 		}
 
@@ -137,12 +138,6 @@ bool FastMarching2Star::wavePropagation(){
 
 		if( cLoc.x == goal.x && cLoc.y == goal.y ){ // if the current node equals goal, construct path
 			this->time = gScore.clone();
-
-
-
-			namedWindow("time", WINDOW_NORMAL);
-			imshow("time", this->time);
-			waitKey(0);
 			return true;
 		}
 
@@ -150,12 +145,12 @@ bool FastMarching2Star::wavePropagation(){
 			Point nbr;
 			nbr.x += cLoc.x + nx[ni];
 			nbr.y += cLoc.y + ny[ni];
-			if( nbr.x >= 0 && nbr.x < this->map.cols && nbr.y >= 0 && nbr.y < this->map.rows ){ // is nbr on mat?
+			if( nbr.x >= 0 && nbr.x < this->speedMap.cols && nbr.y >= 0 && nbr.y < this->speedMap.rows ){ // is nbr on mat?
 				if(cSet.at<short>(nbr) == 1){ // has it already been eval? in cSet
 					continue;
 				}
 				float dist = sqrt(pow(cLoc.x-nbr.x,2) + pow(cLoc.y-nbr.y,2));
-				float avg_vel = (this->map.at<float>(cLoc) + this->map.at<float>(nbr))/2;
+				float avg_vel = (this->speedMap.at<float>(cLoc) + this->speedMap.at<float>(nbr))/2;
 				float ngScore = gScore.at<float>(cLoc) + dist / avg_vel;
 				if(oSet.at<short>(nbr) == 0){
 					oSet.at<short>(nbr) = 1;  // add nbr to open set
@@ -166,7 +161,7 @@ bool FastMarching2Star::wavePropagation(){
 				}
 
 				gScore.at<float>(nbr) = ngScore;
-				if( this->map.at<float>(nbr) > 0.0 ){
+				if( this->speedMap.at<float>(nbr) > 0.0 ){
 					dist = sqrt(pow(nbr.x-goal.x,2) + pow(nbr.y-goal.y,2));
 					fScore.at<float>(nbr) = gScore.at<float>(nbr) + dist / this->maxSpeed;
 				}
@@ -176,16 +171,31 @@ bool FastMarching2Star::wavePropagation(){
 			}
 		}
 	}
+
+	this->time = gScore.clone();
 	return false;
 }
 
 void FastMarching2Star::displayMap(){
 
-	Mat display = Mat::zeros(this->map.size(), CV_8UC1);
-	for(int i=1; i<this->map.cols-1; i++){
-		for(int j=1; j<this->map.rows-1; j++){
+	Mat display = this->map.clone();
+
+
+	circle( display, start, 10, Scalar(127), -1);
+	circle( display, goal, 10, Scalar(127), -1);
+
+	namedWindow("fm2 Map", WINDOW_NORMAL);
+	imshow("fm2 Map", display);
+	waitKey(0);
+}
+
+void FastMarching2Star::displaySpeedMap(){
+
+	Mat display = Mat::zeros(this->speedMap.size(), CV_8UC1);
+	for(int i=1; i<this->speedMap.cols-1; i++){
+		for(int j=1; j<this->speedMap.rows-1; j++){
 			Point p(i,j);
-			float val = (this->maxSpeed - this->map.at<float>(p)) / (this->maxSpeed);
+			float val = (this->maxSpeed - this->speedMap.at<float>(p)) / (this->maxSpeed);
 			int shade = 255 - round( val*255 );
 
 			display.at<uchar>(p) = shade;
@@ -195,8 +205,8 @@ void FastMarching2Star::displayMap(){
 	circle( display, start, 10, Scalar(127), -1);
 	circle( display, goal, 10, Scalar(127), -1);
 
-	namedWindow("fm2 map", WINDOW_NORMAL);
-	imshow("fm2 map", display);
+	namedWindow("fm2 speedMap", WINDOW_NORMAL);
+	imshow("fm2 speedMap", display);
 	waitKey(0);
 }
 
@@ -205,9 +215,9 @@ void FastMarching2Star::displayTime(){
 	double min, max;
 	minMaxLoc( this->time, &min, &max);
 
-	Mat display = Mat::zeros(this->map.size(), CV_8UC1);
-	for(int i=1; i<this->map.cols-1; i++){
-		for(int j=1; j<this->map.rows-1; j++){
+	Mat display = Mat::zeros(this->speedMap.size(), CV_8UC1);
+	for(int i=1; i<this->speedMap.cols-1; i++){
+		for(int j=1; j<this->speedMap.rows-1; j++){
 			Point p(i,j);
 			float val = (max - this->time.at<float>(p)) / (max);
 			int shade = 255 - round( val*255 );
@@ -219,21 +229,21 @@ void FastMarching2Star::displayTime(){
 	circle( display, start, 10, Scalar(127), -1);
 	circle( display, goal, 10, Scalar(127), -1);
 
-	namedWindow("fm2 map", WINDOW_NORMAL);
-	imshow("fm2 map", display);
+	namedWindow("fm2 time", WINDOW_NORMAL);
+	imshow("fm2 time", display);
 	waitKey(0);
 }
 
-void FastMarching2Star::displayPath( vector<Point2f> &path ){
+void FastMarching2Star::displayPath_over_time( vector<Point2f> &path ){
 
 	double min, max;
 	minMaxLoc( this->time, &min, &max);
 
-	Mat display = Mat::zeros(this->map.size(), CV_8UC3);
+	Mat display = Mat::zeros(this->speedMap.size(), CV_8UC3);
 
 
-	for(int i=1; i<this->map.cols-1; i++){
-		for(int j=1; j<this->map.rows-1; j++){
+	for(int i=1; i<this->speedMap.cols-1; i++){
+		for(int j=1; j<this->speedMap.rows-1; j++){
 			Point p(i,j);
 			float val = (max - this->time.at<float>(p)) / (max);
 			int shade = 255 - round( val*255 );
@@ -254,6 +264,58 @@ void FastMarching2Star::displayPath( vector<Point2f> &path ){
 	waitKey(0);
 }
 
+void FastMarching2Star::displayPath_over_map( vector<Point2f> &path ){
+
+	Mat display = Mat::zeros(this->map.size(), CV_8UC3);
+	for(int i=0; i<this->map.cols; i++){
+		for(int j=0; j<this->map.rows; j++){
+			Point p(i,j);
+			if(this->map.at<uchar>(p) == 255){
+				display.at<Vec3b>(p) = Vec3b(0,0,0);
+			}
+			else{
+				display.at<Vec3b>(p) = Vec3b(255,255,255);
+			}
+		}
+	}
+
+	for(size_t i=0; i<path.size(); i++){
+		circle( display, path[i], 1, Scalar(0,0,255), -1);
+	}
+
+	circle( display, start, 5, Scalar(0,0,255), -1);
+	circle( display, goal, 5, Scalar(0,0,255), -1);
+
+	namedWindow("fm2 speedMap", WINDOW_NORMAL);
+	imshow("fm2 speedMap", display);
+	waitKey(0);
+}
+
+void FastMarching2Star::displayPath_over_speedMap( vector<Point2f> &path ){
+
+	Mat display = Mat::zeros(this->speedMap.size(), CV_8UC3);
+	for(int i=1; i<this->speedMap.cols-1; i++){
+		for(int j=1; j<this->speedMap.rows-1; j++){
+			Point p(i,j);
+			float val = (this->maxSpeed - this->speedMap.at<float>(p)) / (this->maxSpeed);
+			int shade = 255 - round( val*255 );
+
+			display.at<Vec3b>(p) = Vec3b(shade,shade,shade);
+		}
+	}
+
+	for(size_t i=0; i<path.size(); i++){
+		circle( display, path[i], 1, Scalar(0,0,255), -1);
+	}
+
+	circle( display, start, 5, Scalar(0,0,255), -1);
+	circle( display, goal, 5, Scalar(0,0,255), -1);
+
+	namedWindow("fm2 speedMap", WINDOW_NORMAL);
+	imshow("fm2 speedMap", display);
+	waitKey(0);
+}
+
 
 void FastMarching2Star::inflateWalls_to_crashRadius(){
 	// this leaves just a value of 0.0
@@ -262,11 +324,11 @@ void FastMarching2Star::inflateWalls_to_crashRadius(){
 	float ny[] = {0.0, 0.0, -1.0, 1.0};
 
 	for(float s=0; s<this->crashRadius; s+=this->cell2Meter){
-		Mat toInflate = Mat::zeros(this->map.size(), CV_8UC1);
-		for(int i=1; i<this->map.cols-1; i++){
-			for(int j=1; j<this->map.rows-1; j++){
+		Mat toInflate = Mat::zeros(this->speedMap.size(), CV_8UC1);
+		for(int i=1; i<this->speedMap.cols-1; i++){
+			for(int j=1; j<this->speedMap.rows-1; j++){
 				Point p(i,j);
-				if( this->map.at<float>(p) == 0.0){
+				if( this->speedMap.at<float>(p) == 0.0){
 					for(int n=0; n<4; n++){
 						Point pp;
 						pp.x = p.x + nx[n];
@@ -276,11 +338,11 @@ void FastMarching2Star::inflateWalls_to_crashRadius(){
 				}
 			}
 		}
-		for(int i=1; i<this->map.cols-1; i++){
-			for(int j=1; j<this->map.rows-1; j++){
+		for(int i=1; i<this->speedMap.cols-1; i++){
+			for(int j=1; j<this->speedMap.rows-1; j++){
 				Point p(i,j);
 				if( toInflate.at<uchar>(p) == 1){
-					this->map.at<float>(p) = 0.0;
+					this->speedMap.at<float>(p) = 0.0;
 				}
 			}
 		}
@@ -304,11 +366,11 @@ void FastMarching2Star::inflateWalls_to_inflationRadius(){
 
 	while( inflateVal < this->maxSpeed ){
 		inflateVal += inflateIncrement;
-		Mat toInflate = Mat::zeros(this->map.size(), CV_8UC1);
-		for(int i=1; i<this->map.cols-1; i++){
-			for(int j=1; j<this->map.rows-1; j++){
+		Mat toInflate = Mat::zeros(this->speedMap.size(), CV_8UC1);
+		for(int i=1; i<this->speedMap.cols-1; i++){
+			for(int j=1; j<this->speedMap.rows-1; j++){
 				Point p(i,j);
-				if( this->map.at<float>(p) == inflateVal_prior){
+				if( this->speedMap.at<float>(p) == inflateVal_prior){
 					for(int n=0; n<4; n++){
 						Point pp;
 						pp.x = p.x + nx[n];
@@ -318,11 +380,11 @@ void FastMarching2Star::inflateWalls_to_inflationRadius(){
 				}
 			}
 		}
-		for(int i=1; i<this->map.cols-1; i++){
-			for(int j=1; j<this->map.rows-1; j++){
+		for(int i=1; i<this->speedMap.cols-1; i++){
+			for(int j=1; j<this->speedMap.rows-1; j++){
 				Point p(i,j);
-				if( toInflate.at<uchar>(p) == 1 && this->map.at<float>(p) == this->maxSpeed ){
-					this->map.at<float>(p) = inflateVal;
+				if( toInflate.at<uchar>(p) == 1 && this->speedMap.at<float>(p) == this->maxSpeed ){
+					this->speedMap.at<float>(p) = inflateVal;
 				}
 			}
 		}

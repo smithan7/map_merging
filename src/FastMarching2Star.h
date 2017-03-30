@@ -33,14 +33,17 @@ public:
 	void inflateWalls_to_crashRadius();
 	void inflateWalls_to_inflationRadius();
 	void displayMap();
+	void displaySpeedMap();
 	void displayTime();
 	bool wavePropagation();
 	Point2f getGradients( Point2f p );
 	vector<Point2f> findPath();
-	void displayPath( vector<Point2f> &path );
+	void displayPath_over_time( vector<Point2f> &path );
+	void displayPath_over_map( vector<Point2f> &path );
+	void displayPath_over_speedMap( vector<Point2f> &path );
 
 
-	Mat map, time;
+	Mat map, speedMap, time;
 	float cell2Meter;
 	float fm_tol;
 	float crashRadius;

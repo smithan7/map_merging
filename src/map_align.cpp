@@ -57,9 +57,10 @@ int main() {
 	fm2.inflateWalls_to_inflationRadius();
 	//fm2.displayMap();
 	fm2.wavePropagation();
-	//fm2.displayTime();
 	vector<Point2f> path = fm2.findPath();
-	fm2.displayPath( path );
+	fm2.displayPath_over_map( path );
+	fm2.displayPath_over_time( path );
+	fm2.displayPath_over_speedMap( path );
 
 	Mat lastGood;
 	Mat transform;
