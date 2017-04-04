@@ -19,9 +19,7 @@ KeypointMatcher::~KeypointMatcher() {
 double KeypointMatcher::linearDist(vector<Point2f> &sub_pts, vector<Point2f> &set_pts, vector<Point2f> &sub_matches, vector<Point2f> &set_matches, float tol){
 	double distSum = 0;
 
-	int numPts = sub_pts.size();//50;
-
-	for(size_t i=0; i<numPts; i++){
+	for(size_t i=0; i<sub_pts.size(); i++){
 		int iRand = rand() % sub_pts.size();
 		double minDist = INFINITY;
 		int mindex = -1;
@@ -71,7 +69,7 @@ Mat KeypointMatcher::getRotationMatrix(vector<Point2f> &src, vector<Point2f> &ds
 
 	bool debug = true;
 	float Cxx = 0.0, Cxy = 0.0, Cyx = 0.0, Cyy = 0.0;
-	for (int i=0; i<src.size(); i++) {
+	for (size_t i=0; i<src.size(); i++) {
 	    Cxx += src[i].x*dst[i].x;
 	    Cxy += src[i].x*dst[i].y;
 	    Cyx += src[i].y*dst[i].x;

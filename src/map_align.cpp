@@ -14,6 +14,7 @@
 
 #include "KeypointMatcher.h"
 #include "FastMarching2Star.h"
+#include "SatImg.h"
 
 #include <vector>
 
@@ -27,8 +28,8 @@ int main() {
 	Mat sub_mat = imread("/home/rdml/git/inference_coordination/maps/gmapping_split1.jpg", CV_8UC3);
 	Mat set_mat = imread("/home/rdml/git/inference_coordination/maps/gmapping.jpg", CV_8UC3);
 
-	cout << "sub_mat.size(): " << sub_mat.size() << endl;
-	cout << "set_mat.size(): " << set_mat.size() << endl;
+	//cout << "sub_mat.size(): " << sub_mat.size() << endl;
+	//cout << "set_mat.size(): " << set_mat.size() << endl;
 
 	//resize(sub, sub, Size(), 0.2, 0.2);
 	//resize(set, set, Size(), 0.2, 0.2);
@@ -46,27 +47,36 @@ int main() {
 	kpMatcher.getWallPts(set_mat, set_pts);
 	kpMatcher.getWallPts(sub_mat, sub_pts);
 	vector<Point2f> sub_raw = sub_pts;
-	cout << "set.size(): " << set_pts.size() << endl;
-	cout << "sub.size(): " << sub_pts.size() << endl;
+	//cout << "set.size(): " << set_pts.size() << endl;
+	//cout << "sub.size(): " << sub_pts.size() << endl;
 
 
-	FastMarching2Star fm2( set_mat, set_pts );
-	//fm2.displayMap();
-	fm2.inflateWalls_to_crashRadius();
-	//fm2.displayMap();
-	fm2.inflateWalls_to_inflationRadius();
-	//fm2.displayMap();
-	fm2.wavePropagation();
-	vector<Point2f> path = fm2.findPath();
-	fm2.displayPath_over_map( path );
-	fm2.displayPath_over_time( path );
-	fm2.displayPath_over_speedMap( path );
+	//FastMarching2Star fm2( set_mat, set_pts );
+
+	double lat0 = 44.606242;
+	double lon0 = -123.279113; // bottom left corner, t junction of segment of main chip ross loop
+	double lat1 = 44.609221;
+	double lon1 = -123.284927; // top right
+
+	vector<double> start;
+
+	vector<double> goal;
+
+	vector<double> corners;
+	corners.push_back( lat0 );
+	corners.push_back( lon0 );
+	corners.push_back( lat1 );
+	corners.push_back( lon1 );
+
+	SatImg satImg("/home/rdml/git/map_align/images/chip_ross_park.png", 100, corners);
+	cv::waitKey(0);
+
+	return 0;
+
 
 	Mat lastGood;
 	Mat transform;
 	vector<float> dists;
-	double lastDist = INFINITY;
-	int test = 0;
 
 	Mat H_kept = cv::Mat::eye(3,3,CV_64FC1);
 	float theta = 3.14159*10/360;
@@ -89,12 +99,11 @@ int main() {
 	while(true) {
 		vector<Point2f> set_matches, sub_matches;
 
-	    double distSum = kpMatcher.linearDist(sub_pts, set_pts, set_matches, sub_matches, 300.0);
+	    kpMatcher.linearDist(sub_pts, set_pts, set_matches, sub_matches, 300.0);
 
 	    kpMatcher.plotMatches(set_mat, set_pts, sub_matches, set_matches);
 
-	    lastDist = distSum;
-		float param[3] = {0,0,0};
+	    float param[3] = {0,0,0};
 		kpMatcher.fit3DofQUADRATIC(set_matches, sub_matches, param, set_matches[0]);
 
 		if(abs(param[0]) + abs(param[1]) + abs(param[2]) < 0.01){

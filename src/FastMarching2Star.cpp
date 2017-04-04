@@ -13,8 +13,11 @@ FastMarching2Star::FastMarching2Star( Mat &map, vector<Point2f> &walls ) {
 	goal = Point2f(450, 300);
 
 	maxSpeed = 1.0;
+
 	this->speedMap = Mat::ones(map.size(), CV_32FC1)*maxSpeed;
 	this->map = Mat::zeros(map.size(), CV_8UC1);
+	this->time = Mat::zeros(this->speedMap.size(), CV_32FC1);
+
 	cell2Meter = 0.5;
 	crashRadius = 1.0;
 	inflationRadius = 10.0;
@@ -24,6 +27,20 @@ FastMarching2Star::FastMarching2Star( Mat &map, vector<Point2f> &walls ) {
 		this->speedMap.at<float>(walls[i]) = 0.0;
 		this->map.at<uchar>(walls[i]) = 255;
 	}
+
+
+	//fm2.displayMap();
+	inflateWalls_to_crashRadius();
+	//fm2.displayMap();
+	inflateWalls_to_inflationRadius();
+	//fm2.displayMap();
+	wavePropagation();
+	vector<Point2f> path = findPath();
+	displayPath_over_map( path );
+	displayPath_over_time( path );
+	displayPath_over_speedMap( path );
+
+
 }
 
 vector<Point2f> FastMarching2Star::findPath(){
@@ -95,7 +112,6 @@ bool FastMarching2Star::wavePropagation(){
 	if( abs(start.x - goal.x) + abs(start.y - goal.y) < fm_tol ){
 		return true;
 	}
-	this->time = Mat::zeros(this->speedMap.size(), CV_32FC1);
 
 	Mat cSet = Mat::zeros(this->speedMap.size(), CV_16S); // 1 means in closed set, 0 means not
 	Mat oSet = Mat::zeros(this->speedMap.size(), CV_16S); // 1 means in open set, 0 means not
