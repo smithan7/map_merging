@@ -7,10 +7,10 @@
 //============================================================================
 
 #include <iostream>
-#include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <string>
 
 #include "KeypointMatcher.h"
 #include "FastMarching2Star.h"
@@ -50,29 +50,67 @@ int main() {
 	//cout << "set.size(): " << set_pts.size() << endl;
 	//cout << "sub.size(): " << sub_pts.size() << endl;
 
+	int map_num = 0;
+	double lat1, lon1, lat0, lon0;
+	double start_lat, start_lon, goal_lat, goal_lon;
 
-	//FastMarching2Star fm2( set_mat, set_pts );
+	if( map_num == 0){
+		lat1 = 44.538552;
+		lon1 = -123.247446; // bottom right corner
+		lat0 =  44.539847;
+		lon0 = -123.251004; // top left corner
 
-	double lat0 = 44.606242;
-	double lon0 = -123.279113; // bottom left corner, t junction of segment of main chip ross loop
-	double lat1 = 44.609221;
-	double lon1 = -123.284927; // top right
+		start_lat = 44.539201;
+		start_lon = -123.250343;
+		goal_lat = 44.539300;
+		goal_lon = -123.248151;
+	}
+	//harware 1
+	else if( map_num == 1){
+		lat1 = 44.537679;
+		lon1 = -123.248297; // bottom right corner
+		lat0 = 44.539295;
+		lon0 = -123.249711; // top left corner
 
-	vector<double> start;
+		start_lat = 44.537865;
+		start_lon = -123.249370;
+		goal_lat = 44.539070;
+		goal_lon = -123.248856;
+	}
+	//harware 2
+	else if( map_num == 2){
+		lat1 = 44.537470;
+		lon1 = -123.249107; // bottom right corner
+		lat0 = 44.539048;
+		lon0 = -123.250807; // top left corner
 
-	vector<double> goal;
+		start_lat = 44.537523;
+		start_lon = -123.249329;
+		goal_lat = 44.538916;
+		goal_lon = -123.250282;
+	}
+
+	vector<double> start, goal;
+	start.push_back( start_lon );
+	start.push_back( start_lat );
+
+	goal.push_back( goal_lon );
+	goal.push_back( goal_lat );
 
 	vector<double> corners;
-	corners.push_back( lat0 );
 	corners.push_back( lon0 );
-	corners.push_back( lat1 );
+	corners.push_back( lat0 );
 	corners.push_back( lon1 );
+	corners.push_back( lat1 );
 
-	SatImg satImg("/home/rdml/git/map_align/images/chip_ross_park.png", 100, corners);
+	std::string s = std::to_string( map_num );
+	//SatImg satImg("/home/rdml/git/map_align/short_hardware/", "easy"+s, corners, start, goal);
+    //SatImg satImg("/home/rdml/git/map_align/short_hardware/", "easy"+s, corners, start, goal);
+	SatImg satImg("/home/rdml/git/map_align/hardwareMats/", "hardware"+s, corners, start, goal);
+
 	cv::waitKey(0);
 
 	return 0;
-
 
 	Mat lastGood;
 	Mat transform;
