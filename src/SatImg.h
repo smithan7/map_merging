@@ -48,6 +48,9 @@ public:
 		int numVertices ;
 		int numEdges ;
 
+
+		void get_task_set(cv::Mat map, cv::Mat img, std::vector<std::vector<double> > &vertices_pixels, string mapName);
+
 		vector<vector<double> > importVertices();
 		vector<vector<double> > gps_to_pixels( vector<double> corners, vector<vector<double> > &vertices, double x, double y);
 
@@ -55,6 +58,7 @@ public:
 		vector<double> map_size;
 		double map_height_m, map_width_m;
 		double mat_width_p, mat_height_p;
+		double pixel_height_m, pixel_width_m;
 		void setMapParams( vector<double> corners );
 		void setNumVertices();
 

@@ -14,6 +14,8 @@ SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vect
 
 
 	cv::Mat img = cv::imread(image_dir + image_name + ".png", CV_LOAD_IMAGE_COLOR);
+	cv::Mat img_raw;
+	img.copyTo(img_raw);
 	//cv::Mat img = cv::imread("/home/rdml/git/map_align/short_hardware/easy1.PNG", CV_LOAD_IMAGE_COLOR);
 	this->mat_width_p = img.size().width-1;
 	this->mat_height_p = img.size().height-1;
@@ -71,8 +73,205 @@ SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vect
 	vector< vector<double> > edges = RadiusConnect(vertices_pixel, vertices_gps, radius, thresholded, image_name) ;
 
 	show_graph( img, vertices_pixel, vertices_gps, edges );
+
+	this->get_task_set(thresholded, img_raw, vertices_pixel, image_name);
+
 	waitKey(0);
 }
+
+void SatImg::get_task_set(cv::Mat map, cv::Mat img, std::vector<std::vector<double> > &vertices_pixels, string mapName){
+
+	this->pixel_height_m = this->map_height_m / this->mat_height_p;
+	this->pixel_width_m = this->map_width_m / this->mat_width_p;
+
+	std::vector<Point> task_locs;
+
+	cv::Mat reward_map = Mat::ones(map.size(), CV_8UC1)*255;
+	double radius_m = 20;
+	int radius_p = 100;//radius_m * std::min(this->pixel_height_m, this->pixel_width_m);
+	double tree_thresh = 0.3;
+
+	cv::Scalar temp = 0.01*cv::sum(reward_map);
+	double thresh = temp[0];
+	double reward = double(INFINITY);
+	while( reward > thresh){
+		double max_r = -1;
+		int max_i = -1;
+
+		for(int i=0; i<this->numVertices; i++){
+			// get rect with circle
+			//printf("map_size p (%f/%f) and vertices (%f/%f)\n", this->mat_width_p, this->mat_height_p, vertices_pixels[i][0], vertices_pixels[i][1]);
+
+
+			Point2i cen(vertices_pixels[i][0], vertices_pixels[i][1]);
+
+			int left = std::max(0,cen.x-radius_p);
+			int right = std::min(cen.x+radius_p, int(this->mat_width_p)-1);
+			int top = std::max(0,cen.y-radius_p);
+			int bottom = std::min(cen.y+radius_p, int(this->mat_height_p)-1);
+
+			cv::Rect r(Point(left,top),Point(right,bottom));
+
+			//printf("l/r(%i/%i) and t/b (%i/%i)\n", left,right,top,bottom);
+			//cv::waitKey(100);
+
+			// obtain roi
+			Mat roi(reward_map, r);
+
+			// make a mask over roi
+			Mat mask(roi.size(), roi.type(), Scalar::all(0));
+			// white area in center
+			cv::circle(mask, Point(radius_p, radius_p), radius_p, Scalar::all(255), -1);
+
+			// combine masks
+			Mat masked_roi = roi & mask;
+			//cv::namedWindow("masked roi", WINDOW_NORMAL);
+			//cv::imshow("masked roi", masked_roi);
+
+			// get the reward in the masked area
+			Scalar temp = cv::sum(masked_roi);
+			double reward_cropped = temp[0];
+
+			/*if(reward_cropped >= pow(double(radius_p),2)*3.1){
+				max_i = i;
+				max_r = reward_cropped;
+				break;
+			}*/
+
+			// is it the best?
+			if(reward_cropped > max_r){
+				max_r = reward_cropped;
+				max_i = i;
+			}
+		}
+		task_locs.push_back(Point(vertices_pixels[max_i][0],vertices_pixels[max_i][1]));
+
+		//printf("map_size p (%f/%f) and vertices (%f/%f)\n", this->mat_width_p, this->mat_height_p, vertices_pixels[max_i][0], vertices_pixels[max_i][1]);
+		//printf("max_r: %f \n", max_r);
+
+		cv::circle(reward_map, Point(vertices_pixels[max_i][0],vertices_pixels[max_i][1]) , radius_p, Scalar::all(0), -1);
+
+		//cv::namedWindow("Reward Map", WINDOW_NORMAL);
+		//cv::imshow("Reward Map", reward_map);
+		//cv::waitKey(100);
+
+		Scalar temp = cv::sum(reward_map);
+		reward = temp[0];
+	}
+
+	std::vector<int> uav_tasks;
+	std::vector<int> human_tasks;
+
+	Mat uav_map, human_map;
+	img.copyTo(uav_map);
+	img.copyTo(human_map);
+
+	for(size_t i=0; i<task_locs.size(); i++){
+		Point2i cen = task_locs[i];
+
+		int left = std::max(0,cen.x-radius_p);
+		int right = std::min(cen.x+radius_p, int(this->mat_width_p)-1);
+		int top = std::max(0,cen.y-radius_p);
+		int bottom = std::min(cen.y+radius_p, int(this->mat_height_p)-1);
+
+		cv::Rect r(Point(left,top),Point(right,bottom));
+
+		//printf("l/r(%i/%i) and t/b (%i/%i)\n", left,right,top,bottom);
+		//cv::waitKey(100);
+
+		// obtain roi
+		Mat roi(map, r);
+
+		// make a mask over roi
+		Mat mask(roi.size(), roi.type(), Scalar::all(0));
+		// white area in center
+		cv::circle(mask, Point(radius_p, radius_p), radius_p, Scalar::all(255), -1);
+
+		//Mat temp_mat;
+		//map.copyTo(temp_mat);
+		//cv::circle(temp_mat, task_locs[i], radius_p, Scalar::all(127), 2);
+		//cv::namedWindow("temp", WINDOW_NORMAL);
+		//cv::imshow("temp", temp_mat);
+		//cv::waitKey(10);
+
+		// combine masks
+		Mat masked_roi = roi & mask;
+		//cv::namedWindow("masked roi", WINDOW_NORMAL);
+		//cv::imshow("masked roi", masked_roi);
+		//cv::waitKey(10);
+
+		// get the reward in the masked area
+		Scalar temp = cv::sum(masked_roi);
+		double tree_count_in_roi = temp[0];
+		double max_count = pow(double(radius_p),2)*3.1*255.0;
+		double mean_tree = tree_count_in_roi / max_count;
+		if(mean_tree > tree_thresh){
+			human_tasks.push_back(i);
+			cv::circle(human_map, task_locs[i] , radius_p, Scalar(0,255,0), -1);
+			//cout << "human_task" << endl;
+			//cv::namedWindow("human map 1", WINDOW_NORMAL);
+			//cv::imshow("human map 1", human_map);
+			//cv::waitKey(10);
+		}
+		else{
+			uav_tasks.push_back(i);
+			cv::circle(uav_map, task_locs[i] , radius_p, Scalar(0,0,255), -1);
+			//cout << "uav_task" << endl;
+			//cv::namedWindow("uav map 1", WINDOW_NORMAL);
+			//cv::imshow("uav map 1", uav_map);
+			//cv::waitKey(10);
+		}
+
+		//cout << "mean tree: " <<  mean_tree << " = " << tree_count_in_roi << " / " << max_count << endl;
+		//waitKey(10);
+
+	}
+	cv::namedWindow("uav map 1", WINDOW_NORMAL);
+	cv::imshow("uav map 1", uav_map);
+	cv::waitKey(10);
+
+	cv::namedWindow("human map 1", WINDOW_NORMAL);
+	cv::imshow("human map 1", human_map);
+	cv::waitKey(10);
+
+	Mat team_map;
+	cv::addWeighted(human_map, 0.5, uav_map, 0.5, 0, team_map);
+
+	cv::namedWindow("team map 1", WINDOW_NORMAL);
+	cv::imshow("team map 1", team_map);
+	cv::waitKey(10);
+
+	cv::addWeighted(team_map, 0.5, img, 0.5, 0, team_map);
+
+	cv::namedWindow("team map", WINDOW_NORMAL);
+	cv::imshow("team map", team_map);
+	cv::waitKey(10);
+
+	// Write human tasks to txt file
+	stringstream hFileName ;
+	hFileName << "/home/rdml/git/map_align/hardwarePaths/" << mapName << "_human_tasks.txt" ;
+	ofstream human_File ;
+	human_File.open(hFileName.str().c_str()) ;
+
+	for (size_t i = 0; i < human_tasks.size(); i++){
+		human_File << human_tasks[i] << "\n" ;
+	}
+	human_File.close() ;
+
+	// Write uav tasks to txt file
+	stringstream uFileName ;
+	uFileName << "/home/rdml/git/map_align/hardwarePaths/" << mapName << "_uav_tasks.txt" ;
+	ofstream uav_File ;
+	uav_File.open(uFileName.str().c_str()) ;
+
+	for (size_t i = 0; i < uav_tasks.size(); i++){
+		uav_File << uav_tasks[i] << "\n" ;
+	}
+	uav_File.close() ;
+
+
+}
+
 
 vector<vector<double> > SatImg::gps_to_pixels( vector<double> corners, vector<vector<double> > &vertices, double x, double y){
 
@@ -99,7 +298,6 @@ vector<vector<double> > SatImg::importVertices(){
 	}
 
 	return vertices_gps;
-
 }
 
 
