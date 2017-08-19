@@ -17,12 +17,13 @@ SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vect
 	cv::Mat img_raw;
 	img.copyTo(img_raw);
 	//cv::Mat img = cv::imread("/home/rdml/git/map_align/short_hardware/easy1.PNG", CV_LOAD_IMAGE_COLOR);
-	this->mat_width_p = img.size().width-1;
-	this->mat_height_p = img.size().height-1;
+	this->mat_width_p = img.size().width;
+	this->mat_height_p = img.size().height;
 
 	this->setMapParams( corners );
 	this->setNumVertices( );
 
+	cout << "map size pixels: " << img.cols << ", " << img.rows << endl;
 	cout << "numVertices: " << this->numVertices << endl;
 
 	cv::namedWindow("sat_img_raw", cv::WINDOW_NORMAL);
@@ -54,7 +55,7 @@ SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vect
 	cv::waitKey(1);
 
 	vector< vector< double > > vertices_pixel, vertices_gps;
-    /*
+
     cout << "Generating Random Vertices in " << mat_width_p << " by " << mat_height_p << endl;
     vertices_pixel = this->makeVertices(mat_width_p, mat_height_p,this->numVertices, image_name);
     vertices_pixel[0] = this->GPStoMap( corners, start, mat_width_p, mat_height_p);
@@ -65,12 +66,13 @@ SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vect
 
 
     vertices_gps = this->convertVerticesToLatLon( vertices_pixel, corners, start, goal, mat_width_p, mat_height_p );
-	*/
+
     vertices_gps = importVertices();
     vertices_pixel = gps_to_pixels( corners, vertices_gps, mat_width_p, mat_height_p );
-    cout << "n vertices: " << vertices_gps.size() << endl;
+    cout << "n vertices_gps: " << vertices_gps.size() << endl;
+    cout << "n vertices_pixels: " << vertices_pixel.size() << endl;
 
-	vector< vector<double> > edges = RadiusConnect(vertices_pixel, vertices_gps, radius, thresholded, image_name) ;
+	vector< vector<double> > edges = RadiusConnect(vertices_pixel, vertices_gps, radius, thresholded, image_name, corners) ;
 
 	show_graph( img, vertices_pixel, vertices_gps, edges );
 
@@ -87,8 +89,9 @@ void SatImg::get_task_set(cv::Mat map, cv::Mat img, std::vector<std::vector<doub
 	std::vector<Point> task_locs;
 
 	cv::Mat reward_map = Mat::ones(map.size(), CV_8UC1)*255;
-	double radius_m = 20;
-	int radius_p = 100;//radius_m * std::min(this->pixel_height_m, this->pixel_width_m);
+	double radius_m = 10;
+	cout << "min pixel_dim in meters = " << std::min(this->pixel_height_m, this->pixel_width_m) << endl;
+	int radius_p = radius_m / std::min(this->pixel_height_m, this->pixel_width_m);
 	double tree_thresh = 0.3;
 
 	cv::Scalar temp = 0.01*cv::sum(reward_map);
@@ -269,7 +272,9 @@ void SatImg::get_task_set(cv::Mat map, cv::Mat img, std::vector<std::vector<doub
 	}
 	uav_File.close() ;
 
-
+	cout << "human tasks: " << human_tasks.size() << endl;
+	cout << "uav_tasks: " << uav_tasks.size() << endl;
+	cout << "total_tasks: " << human_tasks.size() + uav_tasks.size() << endl;
 }
 
 
@@ -542,35 +547,44 @@ double SatImg::haversineDistance( vector<double> p1, vector<double> p2){
 }
 
 // Connect vertices within specified radius variances based on images
-vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices_pixel, vector< vector<double> > vertices_gps, double radius, cv::Mat img, string mapName){
+vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices_pixel, vector< vector<double> > vertices_gps, double radius, cv::Mat img, string mapName, vector<double> corners){
     cout << "IMAGE RADIUS CONNECT" << endl;
 	srand(time(NULL));
-	vector< vector<double> > edges(pow(vertices_pixel.size(),2), vector<double>(4)) ;
+	vector< vector<double> > edges(pow(vertices_pixel.size(),2), vector<double>(5)) ;
 	int k = 0 ;
 	for (size_t i = 0; i < vertices_pixel.size(); i++){
+		cout << "i: " << i << endl;
 		for (size_t j = 0; j < vertices_pixel.size(); j++){
+			cout << "j: " << j << endl;
 			//double distance = EuclideanDistance(vertices_pixel[i], vertices_pixel[j]) ;
 			double distance_meters = this->haversineDistance(vertices_gps[i], vertices_gps[j]);
+			cout << "dist: " << distance_meters << endl;
 			if (distance_meters <= radius && i != j){
+				cout << "a" << endl;
 				vector< vector < int > > pixels = Bresenham(vertices_pixel[i][0], vertices_pixel[i][1], vertices_pixel[j][0], vertices_pixel[j][1]);
+				cout << "pixels.size(): " << pixels.size() << endl;
 				vector< int > color;
 				for(size_t z = 0; z < pixels.size(); z++){
+					cout << "z: " << pixels[z][1] << ", " << pixels[z][0] << endl;
 					int co = img.at<uchar>(int(pixels[z][1]), int(pixels[z][0]));
-					//cout << "co: " << co << endl;
+					cout << "co: " << co << endl;
 					double res = double(co)/255.0;
 					color.push_back(res);
 				}
+				cout << "c" << endl;
 				vector< double > MandV = CalcMeanVar(color); // change this to pixel values
 				edges[k][0] = (double)i ;
 				edges[k][1] = (double)j ;
 				//cout << "MandV: " << MandV[0] << ", " << MandV[1] << endl;
 				edges[k][2] = distance_meters * (1+5.0*MandV[0]);
 				edges[k][3] = distance_meters * MandV[1];
+				edges[k][4] = distance_meters;
 				k++ ;
 			}
 		}
 	}
 	edges.resize(k) ;
+	std::cout << "Edges Complete" << std::endl;
 
 	// Write edges to txt file
 	stringstream eFileName ;
@@ -579,7 +593,7 @@ vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices
 	edgesFile.open(eFileName.str().c_str()) ;
 
 	for (int i = 0; i < int( edges.size() ); i++){
-		edgesFile << edges[i][0] << "," << edges[i][1] << "," << edges[i][2] << "," << edges[i][3] << "\n" ;
+		edgesFile << edges[i][0] << "," << edges[i][1] << "," << edges[i][2] << "," << edges[i][3] << edges[i][4] << "\n" ;
 	}
 	edgesFile.close() ;
 
@@ -617,6 +631,9 @@ vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices
 	rosFile << "num_vertices: " << vertices_gps.size() << "\n";
 	rosFile << "num_edges: " << edges.size() << "\n";
 	rosFile << "edge_cost_rate: 3.0\n";
+	char rosPrint[100] ;
+	sprintf(rosPrint,"corners: [%0.12f,%0.12f,%0.12f,%0.12f]", corners[0], corners[1], corners[2], corners[3]) ;
+	rosFile << rosPrint << endl;
 
 	// vertices
 	for (size_t i = 0; i < vertices_gps.size(); i++){
@@ -627,7 +644,7 @@ vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices
 	// edges
 	for (size_t i = 0; i < edges.size() ; i++){
 		char rosPrint[100] ;
-		sprintf(rosPrint,"edge%d: [%d,%d,%d,%d]", i, int(edges[i][0]), int(edges[i][1]), int(edges[i][2]), int(edges[i][3]) ) ;
+		sprintf(rosPrint,"edge%d: [%d,%d,%d,%d,%d]", i, int(edges[i][0]), int(edges[i][1]), int(edges[i][2]), int(edges[i][3]), int(edges[i][4]) ) ;
 		rosFile << rosPrint << endl;//rosFile << "edge" << i << ": [" << int(edges[i][0]) << "," << int(edges[i][1]) << "," << edges[i][2] << "," << edges[i][3] << "]\n" ;
 	}
 

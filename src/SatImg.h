@@ -70,7 +70,7 @@ public:
 		vector<double> GPStoMap( vector<double> corners, vector<double> point, double x, double y);
 		vector<double> mapToGPS( vector<double> corners, vector<double> point, double x, double y);
 		vector < double > CalcMeanVar(vector< int > points) ;
-		vector< vector<double> > RadiusConnect(vector< vector<double> > vertices_pixel, vector< vector<double> > vertices_gps, double radius, cv::Mat, string mapName) ;
+		vector< vector<double> > RadiusConnect(vector< vector<double> > vertices_pixel, vector< vector<double> > vertices_gps, double radius, cv::Mat, string mapName, vector<double> corners) ;
 		vector< vector<double> > GPSRadiusConnect(vector< vector<double> > vertices, double radius, cv::Mat img, string mapName, double flight_speed);
 		double EuclideanDistance(vector<double> v1, vector<double> v2) ;
 		void show_graph( cv::Mat img, vector<vector<double> > &vertices, vector<vector<double> > &vertices_gps, vector<vector<double> > &edges );

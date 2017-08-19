@@ -50,7 +50,7 @@ int main() {
 	//cout << "set.size(): " << set_pts.size() << endl;
 	//cout << "sub.size(): " << sub_pts.size() << endl;
 
-	int map_num = 0;
+	int map_num = 3 ;
 	double lat1, lon1, lat0, lon0;
 	double start_lat, start_lon, goal_lat, goal_lon;
 
@@ -89,6 +89,20 @@ int main() {
 		goal_lat = 44.538916;
 		goal_lon = -123.250282;
 	}
+	// test environment on OSU
+	else if( map_num == 3){
+		lat1 = 44.564965;
+		lon1 = -123.270456; // bottom right corner
+		lat0 = 44.565683;
+		lon0 =  -123.272974; // top left corner
+
+		start_lat = 44.565483;
+		start_lon = -123.271456;
+		goal_lat = 44.565383;
+		goal_lon = -123.270856;
+	}
+
+
 
 	vector<double> start, goal;
 	start.push_back( start_lon );
