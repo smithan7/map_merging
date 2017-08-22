@@ -9,8 +9,8 @@
 
 SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vector<double> start, vector<double> goal){ // PRM-style graph connection{
 
-    double radius = 20.0; //sqrt(1.9098593171*this->map_width_m*this->map_height_m*(log((double)this->numVertices)/(double)this->numVertices)) ;
-    cout << "Connecting with radius " << radius << endl;
+    double radius_m = 20.0; //sqrt(1.9098593171*this->map_width_m*this->map_height_m*(log((double)this->numVertices)/(double)this->numVertices)) ;
+    cout << "Connecting with radius " << radius_m << " meters" << endl;
 
 
 	cv::Mat img = cv::imread(image_dir + image_name + ".png", CV_LOAD_IMAGE_COLOR);
@@ -40,8 +40,8 @@ SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vect
 
 	cv::Mat thresholded = cv::Mat::zeros( img.rows, img.cols, CV_8UC1 );
 	cv::Mat thresholded_blurred, max_mat;
-	cv::inRange(blurred_img, cv::Scalar(0, 0, 0), cv::Scalar(50, 180, 50), thresholded);
-
+	cv::inRange(blurred_img, cv::Scalar(0, 0, 0), cv::Scalar(70, 190, 70), thresholded);
+	//cv::inRange(blurred_img, cv::Scalar(0, 0, 0), cv::Scalar(50, 180, 50), thresholded);
 	//cv::blur( thresholded, thresholded_blurred, Size( 5, 5 ), Point(-1,-1) );
 	//for(int i=0; i<30; i++){
 	//	cv::blur( thresholded_blurred, thresholded_blurred, Size( 100, 100 ));
@@ -67,15 +67,16 @@ SatImg::SatImg(string image_dir, string image_name, vector<double> corners, vect
 
     vertices_gps = this->convertVerticesToLatLon( vertices_pixel, corners, start, goal, mat_width_p, mat_height_p );
 
-    vertices_gps = importVertices();
-    vertices_pixel = gps_to_pixels( corners, vertices_gps, mat_width_p, mat_height_p );
+    //vertices_gps = importVertices();
+    //vertices_pixel = gps_to_pixels( corners, vertices_gps, mat_width_p, mat_height_p );
     cout << "n vertices_gps: " << vertices_gps.size() << endl;
     cout << "n vertices_pixels: " << vertices_pixel.size() << endl;
 
-	vector< vector<double> > edges = RadiusConnect(vertices_pixel, vertices_gps, radius, thresholded, image_name, corners) ;
+	vector< vector<double> > edges = RadiusConnect(vertices_pixel, vertices_gps, radius_m, thresholded, image_name, corners) ;
 
 	show_graph( img, vertices_pixel, vertices_gps, edges );
 
+	cout << "getting task set" << endl;
 	this->get_task_set(thresholded, img_raw, vertices_pixel, image_name);
 
 	waitKey(0);
@@ -92,7 +93,7 @@ void SatImg::get_task_set(cv::Mat map, cv::Mat img, std::vector<std::vector<doub
 	double radius_m = 10;
 	cout << "min pixel_dim in meters = " << std::min(this->pixel_height_m, this->pixel_width_m) << endl;
 	int radius_p = radius_m / std::min(this->pixel_height_m, this->pixel_width_m);
-	double tree_thresh = 0.3;
+	double tree_thresh = 0.1;
 
 	cv::Scalar temp = 0.01*cv::sum(reward_map);
 	double thresh = temp[0];
@@ -251,26 +252,26 @@ void SatImg::get_task_set(cv::Mat map, cv::Mat img, std::vector<std::vector<doub
 	cv::waitKey(10);
 
 	// Write human tasks to txt file
-	stringstream hFileName ;
-	hFileName << "/home/rdml/git/map_align/hardwarePaths/" << mapName << "_human_tasks.txt" ;
-	ofstream human_File ;
-	human_File.open(hFileName.str().c_str()) ;
-
-	for (size_t i = 0; i < human_tasks.size(); i++){
-		human_File << human_tasks[i] << "\n" ;
+	string eFileName = "/home/rdml/git/map_align/dist_planner_files/" + mapName + "_human_tasks.xml";
+	FileStorage fh(eFileName, FileStorage::WRITE);
+	fh << "n_tasks" << int(human_tasks.size());
+	for (int i = 0; i < int(human_tasks.size()); i++){
+		char nm[100];
+		sprintf(nm, "task%i",i);
+		fh << nm << human_tasks[i];
 	}
-	human_File.close() ;
+	fh.release();
 
 	// Write uav tasks to txt file
-	stringstream uFileName ;
-	uFileName << "/home/rdml/git/map_align/hardwarePaths/" << mapName << "_uav_tasks.txt" ;
-	ofstream uav_File ;
-	uav_File.open(uFileName.str().c_str()) ;
-
-	for (size_t i = 0; i < uav_tasks.size(); i++){
-		uav_File << uav_tasks[i] << "\n" ;
+	eFileName = "/home/rdml/git/map_align/dist_planner_files/" + mapName + "_uav_tasks.xml";
+	FileStorage fu(eFileName, FileStorage::WRITE);
+	fu << "n_tasks" << int(uav_tasks.size());
+	for (int i = 0; i < int( uav_tasks.size() ); i++){
+		char nm[100];
+		sprintf(nm, "task%i",i);
+		fu << nm << uav_tasks[i];
 	}
-	uav_File.close() ;
+	fu.release();
 
 	cout << "human tasks: " << human_tasks.size() << endl;
 	cout << "uav_tasks: " << uav_tasks.size() << endl;
@@ -553,25 +554,25 @@ vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices
 	vector< vector<double> > edges(pow(vertices_pixel.size(),2), vector<double>(5)) ;
 	int k = 0 ;
 	for (size_t i = 0; i < vertices_pixel.size(); i++){
-		cout << "i: " << i << endl;
 		for (size_t j = 0; j < vertices_pixel.size(); j++){
-			cout << "j: " << j << endl;
+			if(i == j){
+				continue;
+			}
+			//cout << "j: " << j << endl;
 			//double distance = EuclideanDistance(vertices_pixel[i], vertices_pixel[j]) ;
 			double distance_meters = this->haversineDistance(vertices_gps[i], vertices_gps[j]);
-			cout << "dist: " << distance_meters << endl;
+			//cout << "dist: " << distance_meters << endl;
 			if (distance_meters <= radius && i != j){
-				cout << "a" << endl;
+				//printf("vertices_pixel[%i][0],[1]: %d, %d \n", i, vertices_pixel[i][0], vertices_pixel[i][1]);
+				//printf("vertices_pixel[%i][0],[1]: %d, %d \n", j, vertices_pixel[j][0], vertices_pixel[j][1]);
+
 				vector< vector < int > > pixels = Bresenham(vertices_pixel[i][0], vertices_pixel[i][1], vertices_pixel[j][0], vertices_pixel[j][1]);
-				cout << "pixels.size(): " << pixels.size() << endl;
 				vector< int > color;
 				for(size_t z = 0; z < pixels.size(); z++){
-					cout << "z: " << pixels[z][1] << ", " << pixels[z][0] << endl;
 					int co = img.at<uchar>(int(pixels[z][1]), int(pixels[z][0]));
-					cout << "co: " << co << endl;
 					double res = double(co)/255.0;
 					color.push_back(res);
 				}
-				cout << "c" << endl;
 				vector< double > MandV = CalcMeanVar(color); // change this to pixel values
 				edges[k][0] = (double)i ;
 				edges[k][1] = (double)j ;
@@ -587,43 +588,32 @@ vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices
 	std::cout << "Edges Complete" << std::endl;
 
 	// Write edges to txt file
-	stringstream eFileName ;
-	eFileName << "/home/rdml/git/map_align/hardwarePaths/" << mapName << "_edges.txt" ;
-	ofstream edgesFile ;
-	edgesFile.open(eFileName.str().c_str()) ;
-
+	string eFileName = "/home/rdml/git/map_align/dist_planner_files/" + mapName + "_edges.xml";
+	FileStorage fe(eFileName, FileStorage::WRITE);
+	fe << "n_edges" << int(edges.size());
 	for (int i = 0; i < int( edges.size() ); i++){
-		edgesFile << edges[i][0] << "," << edges[i][1] << "," << edges[i][2] << "," << edges[i][3] << edges[i][4] << "\n" ;
+		char nm[100];
+		sprintf(nm, "edge%i",i);
+		fe << nm << edges[i];
 	}
-	edgesFile.close() ;
+	fe.release();
+
+	// Write vertices to txt file
+	eFileName = "/home/rdml/git/map_align/dist_planner_files/" + mapName + "_vertices.xml";
+	FileStorage fv(eFileName, FileStorage::WRITE);
+	fv << "n_vertices" << int(vertices_gps.size());
+	fv << "corners" << corners;
+	for (int i = 0; i < int(vertices_gps.size()); i++){
+		char nm[100];
+		sprintf(nm, "vertex%i_gps",i);
+		fv << nm << vertices_gps[i];
+	}
+	fv.release();
 
 	/*
-	// Write vertices to txt file
-	stringstream vFileName ;
-	vFileName << "/home/rdml/git/map_align/SatGraphPaths/" << mapName << "_verts.txt" ;
-	ofstream vertsFile ;
-	vertsFile.open(vFileName.str().c_str()) ;
-
-	for (size_t i = 0; i < vertices_gps.size(); i++){
-		vertsFile << vertices_pixel[i][0] << "," << vertices_pixel[i][1] << "\n" ;
-	}
-	vertsFile.close() ;
-	*/
-
-	// Write vertices to txt file
-	stringstream vFileName ;
-	vFileName << "/home/rdml/git/map_align/hardwarePaths/" << mapName << "_verts.txt" ;
-	ofstream vertsFile ;
-	vertsFile.open(vFileName.str().c_str()) ;
-
-	for (size_t i = 0; i < vertices_gps.size(); i++){
-		vertsFile << std::fixed << std::setprecision(12) << vertices_gps[i][0] << "," << vertices_gps[i][1] << "\n" ;
-	}
-	vertsFile.close() ;
-
 	// Write to yaml file for ros
 	stringstream vFileName_ros ;
-	vFileName_ros << "/home/rdml/git/map_align/hardwarePaths/" << mapName << "_rosFile.yaml" ;
+	vFileName_ros << "/home/rdml/git/map_align/dist_planner_files/" << mapName << "_rosFile.yaml" ;
 	ofstream rosFile ;
 	rosFile.open(vFileName_ros.str().c_str()) ;
 
@@ -648,7 +638,8 @@ vector< vector<double> > SatImg::RadiusConnect(vector< vector<double> > vertices
 		rosFile << rosPrint << endl;//rosFile << "edge" << i << ": [" << int(edges[i][0]) << "," << int(edges[i][1]) << "," << edges[i][2] << "," << edges[i][3] << "]\n" ;
 	}
 
-	rosFile.close() ;
+	rosFile.close();
+	*/
 
 	return edges ;
 }
