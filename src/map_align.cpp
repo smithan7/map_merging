@@ -50,7 +50,7 @@ int main() {
 	//cout << "set.size(): " << set_pts.size() << endl;
 	//cout << "sub.size(): " << sub_pts.size() << endl;
 
-	int map_num = 3;
+	int map_num = 4;
 	double lat1, lon1, lat0, lon0;
 	double start_lat, start_lon, goal_lat, goal_lon;
 
@@ -100,6 +100,18 @@ int main() {
 		start_lon = -123.270456;
 		goal_lat = 44.565683;
 		goal_lon = -123.272974;
+	}
+
+	else if( map_num == 4){
+		lat1 = 44.538162;
+		lon1 = -123.247776; // bottom right corner
+		lat0 = 44.539457;
+		lon0 =  -123.250866; // top left corner
+
+		start_lat = 44.539201;
+		start_lon = -123.250343;
+		goal_lat = 44.539300;
+		goal_lon = -123.248151;
 	}
 
 

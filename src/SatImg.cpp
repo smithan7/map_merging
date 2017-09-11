@@ -369,10 +369,10 @@ void SatImg::show_graph( cv::Mat img, vector<vector<double> > &vertices, vector<
 	cout << "vertices goal: " << vertices[this->numVertices - 1][0] << " , " << vertices[this->numVertices - 1][1] << endl;
 
 	cv::Point p( vertices[0][0], vertices[0][1] );
-	cv::circle( img, p , 10, Scalar(0,255,0), -1);
+	//cv::circle( img, p , 10, Scalar(0,255,0), -1);
 
 	cv::Point p2( vertices[this->numVertices-1][0], vertices[this->numVertices - 1][1] );
-	cv::circle( img, p2 ,10, Scalar(0,0,255), -1);
+	//cv::circle( img, p2 ,10, Scalar(0,0,255), -1);
 
 	cv::Mat img2 = img.clone();
 
